@@ -1,31 +1,42 @@
 import json
-from typing import List, Optional
+
+from src.lru_cache import LRUCache
 from .client import Client
 
 
 class ClientRepository:
-    async def get_by_id(self, id: str) -> Optional[Client]:
+
+    def __init__(self) -> None:
+        self.cache = LRUCache(100_000)
+
+    async def get_by_id(self, id: str) -> Client | None:
+        if (self.cache.has(id)):
+            return self.cache.get(id)
+
         with open("db.json", 'r') as f:
             db = json.load(f)
         
-        clients = db.get("clients", [])
-        c = None
-        for i in range(len(clients)):
-            if clients[i]["id"] == id:
-                c = clients[i]
+        clients: dict[str, object] = db.get("clients")
+        client = None
+        for c in db.get("clients", []):
+            if c["id"] == id:
+                client = c
                 break
         
-        if not c:
+        if not client:
             return None
-        
-        return Client(
-            id=c["id"],
-            name=c["name"]
+        new_client = Client(
+            id=client["id"],
+            name=client["name"]
         )
+        self.cache.set(id, new_client)
+        return new_client
 
-    async def get_all(self) -> List[Client]:
+    async def get_all(self) -> list[Client]:
         with open("db.json", 'r') as f:
             db = json.load(f)
-        
         clients = db.get("clients", [])
-        return clients 
+        for c in clients:
+            self.cache.set(c["id"], Client(id=c["id"], name=c["name"]))
+        return db.get("clients", []) 
+

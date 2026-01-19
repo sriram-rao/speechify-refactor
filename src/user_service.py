@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional
 import nanoid
 from .client import Client
@@ -19,31 +19,13 @@ class UserService:
         with open("db.json", 'r') as f:
             db = json.load(f)
 
-        if not firstname or not surname:
-            return False
-        if not email:
+        if not firstname or not surname or not email:
             return False
 
         users = db.get("users", [])
-        u = None
-        for i in range(len(users)):
-            if users[i]["email"] == email:
-                u = users[i]
-                break
-        if u:
+        if not self.check_user_absent(email, users) or not check_adult(self, date_of_birth):
             return False
 
-        now = datetime.now()
-        age = now.year - date_of_birth.year
-
-        if (
-            now.month < date_of_birth.month or
-            (now.month == date_of_birth.month and now.day < date_of_birth.day)
-        ):
-            age -= 1
-
-        if age < 21:
-            return False
 
         client_repository = ClientRepository()
         client = await client_repository.get_by_id(client_id)
@@ -61,24 +43,27 @@ class UserService:
             "email": email,
             "firstname": firstname,
             "surname": surname,
+            "has_credit_limit": client.name != "VeryImportantClient"
         }
 
-        if client.name == "VeryImportantClient":
-            # Skip credit check
-            user["has_credit_limit"] = False
-        elif client.name == "ImportantClient":
-            # Do credit check and double credit limit
-            user["has_credit_limit"] = True
-            user["credit_limit"] = 10000 * 2
-        else:
-            user["has_credit_limit"] = True
-            user["credit_limit"] = 10000
+        if user["has_credit_limit"]:
+            user["credit_limit"] = 10000 * (2 if user["name"] == "ImportantClient" else 1)
 
         db["users"].append(user)
         with open("db.json", 'w') as f:
             json.dump(db, f, indent=2, default=str)
 
         return True
+
+    async def check_user_absent(self, email: str, users) -> bool:
+        user = None
+        if email in [u["email"] for u in users]:
+            user = users[users.index(email)]
+        return user is None
+
+    async def check_adult(self, date_of_birth: datetime):
+        age = (date.today() - date_of_birth.date).days / 365 
+        return age >= 21
 
     async def UpdateUser(self, user: User) -> bool:
         if not user:
