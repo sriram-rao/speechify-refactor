@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Any, Optional
+from typing import Any
 
 class LRUCache:
     """
@@ -19,10 +19,11 @@ class LRUCache:
         # TODO: implement this function
         raise NotImplementedError()
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         # TODO: implement this function
         raise NotImplementedError()
 
     def set(self, key: str, value: Any):
         # TODO: implement this function
         raise NotImplementedError()
+

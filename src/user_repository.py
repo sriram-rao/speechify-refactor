@@ -1,5 +1,7 @@
 import json
-from typing import cast
+from typing import Any, cast
+
+from src.lru_cache import LRUCache
 
 
 class UserRepository:
@@ -21,3 +23,28 @@ class UserRepository:
         with open("db.json", 'w') as file:
             json.dump(self.db, file, indent=2, default=str)
 
+
+class CachedUserRepository:
+    def __init__(self) -> None:
+        self.repo: UserRepository = UserRepository()
+        self.cache: LRUCache = LRUCache(100_000)
+
+    async def cached_get_result(self, key: str, func) -> Any:
+        if self.cache.has(key):
+            return self.cache.get(key)
+        result = func(key)
+        self.cache.set(key, result)
+        return result
+
+    async def get_all(self) -> list[object]:
+        return await self.cached_get_result("all", self.repo.get_all)
+
+    async def get_by_email(self, email: str) -> object:
+        return await self.cached_get_result(email, self.repo.get_by_email)
+
+    async def get_by_id(self, id: str) -> object:
+        return await self.cached_get_result(id, self.repo.get_by_email)
+
+    async def add(self, user: object):
+        self.cache.set(user["id"], user)
+        self.repo.add(user)
