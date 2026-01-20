@@ -1,10 +1,3 @@
-# If I Had More Time
-
-- Complete the refactor.
-  - User_service has almost the same add and update methods
-  - Add proxy classes for cache for each repo
-  - Several code style issues all over the code base
-
 # Introduction
 
 The test is divided into two parts, a refactoring part and an implementation part.
