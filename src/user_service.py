@@ -50,7 +50,6 @@ class UserService:
         
         users: list[User] = []
         for u in users_data:
-            # Parse date string back to datetime
             u = cast(dict[str, str | object], u)
             users.append(user.from_dict(u))
         
