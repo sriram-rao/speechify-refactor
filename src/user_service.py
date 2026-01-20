@@ -1,10 +1,10 @@
-import json
 from datetime import datetime, date
-from typing import List, Optional
-import nanoid
-from .client import Client
+from typing import cast
+
+from src.user_repository import UserRepository
 from .user import User
 from .client_repository import ClientRepository
+from src import user
 
 
 class UserService:
@@ -16,144 +16,47 @@ class UserService:
         date_of_birth: datetime,
         client_id: str
     ) -> bool:
-        with open("db.json", 'r') as f:
-            db = json.load(f)
+        user_repo = UserRepository()
 
-        if not firstname or not surname or not email:
+        if not firstname or not surname or not email \
+            or await user_repo.get_by_email(email) or not await self.is_adult(date_of_birth):
             return False
-
-        users = db.get("users", [])
-        if not self.check_user_absent(email, users) or not check_adult(self, date_of_birth):
-            return False
-
 
         client_repository = ClientRepository()
         client = await client_repository.get_by_id(client_id)
         if not client:
             print("Client not found")
             return False
-        
-        user = {
-            "id": nanoid.generate(),
-            "client": {
-                "id": client.id,
-                "name": client.name
-            },
-            "date_of_birth": date_of_birth.isoformat(),
-            "email": email,
-            "firstname": firstname,
-            "surname": surname,
-            "has_credit_limit": client.name != "VeryImportantClient"
-        }
 
-        if user["has_credit_limit"]:
-            user["credit_limit"] = 10000 * (2 if user["name"] == "ImportantClient" else 1)
-
-        db["users"].append(user)
-        with open("db.json", 'w') as f:
-            json.dump(db, f, indent=2, default=str)
+        user = User(None, firstname, surname, client, date_of_birth, email)
+        await user_repo.add(user.to_dict())
 
         return True
 
-    async def check_user_absent(self, email: str, users) -> bool:
-        user = None
-        if email in [u["email"] for u in users]:
-            user = users[users.index(email)]
-        return user is None
-
-    async def check_adult(self, date_of_birth: datetime):
-        age = (date.today() - date_of_birth.date).days / 365 
+    async def is_adult(self, date_of_birth: datetime):
+        age = (date.today() - date_of_birth.date()).days / 365
         return age >= 21
 
     async def UpdateUser(self, user: User) -> bool:
-        if not user:
+        user_repo = UserRepository()
+        user_from_id = await user_repo.get_by_id(user.id)
+        if user_from_id is None:
             return False
-        
-        with open("db.json", 'r') as f:
-            db = json.load(f)
-        
-        users = db.get("users", [])
-        u_idx = None
-        for i in range(len(users)):
-            if users[i]["id"] == user.id:
-                u_idx = i
-                break
-        if u_idx is None:
-            return False
-        
-        users[u_idx] = {
-            "id": user.id,
-            "client": {
-                "id": user.client.id,
-                "name": user.client.name
-            },
-            "date_of_birth": user.date_of_birth.isoformat(),
-            "email": user.email,
-            "firstname": user.firstname,
-            "surname": user.surname,
-            "has_credit_limit": user.has_credit_limit,
-            "credit_limit": user.credit_limit
-        }
-        
-        with open("db.json", 'w') as f:
-            json.dump(db, f, indent=2, default=str)
-        
+        await user_repo.add(user.to_dict())
         return True
 
-    async def GetAllUsers(self) -> List[User]:
-        with open("db.json", 'r') as f:
-            db = json.load(f)
+    async def GetAllUsers(self) -> list[User]:
+        users_data = await UserRepository().get_all()
         
-        users_data = db.get("users", [])
-        
-        users = []
-        for user_data in users_data:
+        users: list[User] = []
+        for u in users_data:
             # Parse date string back to datetime
-            date_of_birth = datetime.fromisoformat(user_data["date_of_birth"].replace('Z', '+00:00'))
-            
-            user = User(
-                id=user_data["id"],
-                client=Client(
-                    id=user_data["client"]["id"],
-                    name=user_data["client"]["name"]
-                ),
-                date_of_birth=date_of_birth,
-                email=user_data["email"],
-                firstname=user_data["firstname"],
-                surname=user_data["surname"],
-                has_credit_limit=user_data["has_credit_limit"],
-                credit_limit=user_data.get("credit_limit")
-            )
-            users.append(user)
+            u = cast(dict[str, str | object], u)
+            users.append(user.from_dict(u))
         
         return users
 
-    async def GetUserByEmail(self, email: str) -> Optional[User]:
-        with open("db.json", 'r') as f:
-            db = json.load(f)
-        
-        users = db.get("users", [])
-        u = None
-        for i in range(len(users)):
-            if users[i]["email"] == email:
-                u = users[i]
-                break
-        if not u:
-            return None
-        
-        # Parse date string back to datetime
-        date_of_birth = datetime.fromisoformat(u["date_of_birth"].replace('Z', '+00:00'))
-        
-        return User(
-            id=u["id"],
-            client=Client(
-                id=u["client"]["id"],
-                name=u["client"]["name"]
-            ),
-            date_of_birth=date_of_birth,
-            email=u["email"],
-            firstname=u["firstname"],
-            surname=u["surname"],
-            has_credit_limit=u["has_credit_limit"],
-            credit_limit=u.get("credit_limit")
-        ) 
+    async def GetUserByEmail(self, email: str) -> User | None:
+        user_dict = await UserRepository().get_by_email(email)
+        return user.from_dict(user_dict) if user_dict else None
+
